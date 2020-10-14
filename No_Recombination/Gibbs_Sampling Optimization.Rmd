@@ -1,0 +1,371 @@
+---
+title: "Gibbs_Sampling_Optimzation"
+author: "Marcus Tutert"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: 
+  html_document:
+    toc: true # table of content true
+    toc_depth: 3  # upto three depths of headings (specified by #, ## and ###)
+    number_sections: true  ## if you want number sections at each table header
+    theme: united  # many options for theme, this one is my favorite.
+    highlight: tango  # specifies the syntax highlighting style
+    css: my.css   # you can add your custom css, should be in same folder
+---
+
+First things first, let us go and check that our packages are running fine
+```{r setup, include=FALSE}
+#Build the package (always good to update!)
+pkg = "/Users/marcustutert/Desktop/Oxford_Dphil/InferLD"
+devtools::build(pkg = pkg)
+devtools::document(pkg)
+devtools::load_all(pkg, quiet = FALSE)
+package_tarball <- devtools::build(pkg = pkg, manual = TRUE)
+install.packages(package_tarball, repos = NULL, type ="source")
+library(InferLD)
+library(plotly)
+```
+Look at effect of changing nHaps
+```{r nHaps Function, echo=FALSE}
+nhaps    = c(400) #Change the Nhaps in reference panel
+nsnps    = 50                   #Constant NSnps
+results  = c()                   #Store results as a vector
+gwas_variants_af = list()        #Needs to be a list since there might be different number of GWAS variants that pass filtering
+for (i in 1:length(nhaps)) {
+  nSamples              = 10      #Constant nSamples
+  alpha                 = 1e4     #Constant alpha
+  chains                = 1       #Single Chain
+  sim_data              = simulate_genetic_drift(Fst = 1e-1, nhaps = nhaps[i], nsnps = nsnps)
+  observed_gwas_se      = sim_data[[1]]
+  gwas_variants_af[[i]] = sim_data[[2]]  #Store the GWAS variant AF as matrix (nSamples across the columns)
+  ref_hap_panel         = sim_data[[3]]         
+      results[i]        = LD_from_GSHMM(ref_panel_haplotypes = ref_hap_panel,
+                                         Fst                  = 1e-1,
+                                         betas                = FALSE,
+                                         alpha                = alpha,
+                                         nSamples             = nSamples,
+                                         recomb_rate          = 1e-100,
+                                         weights_resolution   = 5,
+                                         likelihood_toggle    = TRUE,
+                                         se_observed          = observed_gwas_se,
+                                         LD_Infer             = FALSE,
+                                         genetic_map          = FALSE,
+                                         chain_likelihood     = TRUE,
+                                         nChains              = chains,
+                                         recombination        = FALSE)
+}
+
+#Add on the traces across the different parameters (ie nHaps)
+p <- plot_ly()
+for (i in 1:length(nhaps)) {
+  nSamples_trace = seq(1:nSamples)
+  r2 = r2_true_inferred_af_across_chains(inferred_allele_freq = results[i][[1]][[4]],
+                                         true_allele_freq     = gwas_variants_af[[i]],
+                                         graphic              = FALSE)
+  p <- add_trace(p, x=nSamples_trace, y=r2, type="scatter", mode="markers",evaluate = TRUE, name = sprintf("%s Ref Haplotypes",nhaps[i]))
+}
+p <- p %>% layout(title = 'Correlation of True to Inferred Allele Frequency Across Sweeps',
+                    xaxis = list(title = 'nSamples (Full Sweeps)'),
+                    yaxis = list(title = 'r2 correlation (Inferred~True)'))
+p
+
+# #Plot the different allele frequencies converging (for best & worse case)
+# low_haps_accuracy  =  allele_frequency_accuracy_across_chains(results[1][[1]][[4]], true_gwas_af = gwas_variants_af[[1]])
+# low_haps_accuracy 
+# high_haps_accuracy =  allele_frequency_accuracy_across_chains(results[5][[1]][[4]], true_gwas_af = gwas_variants_af[[5]])
+# high_haps_accuracy
+#Plot the different likliehoods
+ll_plot = plot_ly()
+for (i in 1:length(nhaps)) {
+  ll = results[i][[1]][[3]]
+  ll_plot <- add_trace(ll_plot, x=seq(1:length(ll)), y=ll, type="scatter", mode="markers",evaluate = TRUE, name = sprintf("%s Ref Haplotypes",nhaps[i]))
+}
+ll_plot <- ll_plot %>% layout(title = 'Log Likelihood Across per Haplotype Sweeps',
+                    xaxis = list(title = 'nSamples (Per Haplotype Sweeps)'),
+                    yaxis = list(title = 'Log Likelihood'))
+ll_plot
+
+```
+Look at effect of changing nSnps
+```{r nSnps Function, echo=FALSE}
+nhaps    = 808                   #Constant nHaps
+nsnps    = c(50,100,200,300,400)                   #Constant NSnps
+results  = c()                   #Store results as a vector
+gwas_variants_af = list()        #Needs to be a list since there might be different number of GWAS variants that pass filtering
+for (i in 1:length(nsnps)) {
+  nSamples              = 10      #Constant nSamples
+  alpha                 = 1e4     #Constant alpha
+  chains                = 1       #Single Chain
+  sim_data              = simulate_genetic_drift(Fst = 1e-5, nhaps = nhaps, nsnps = nsnps[i])
+  observed_gwas_se      = sim_data[[1]]
+  gwas_variants_af[[i]] = sim_data[[2]]  #Store the GWAS variant AF as matrix (nSamples across the columns)
+  ref_hap_panel         = sim_data[[3]]         
+      results[i]        = LD_from_GSHMM(ref_panel_haplotypes = ref_hap_panel,
+                                         Fst                  = 1e-1,
+                                         betas                = FALSE,
+                                         alpha                = alpha,
+                                         nSamples             = nSamples,
+                                         recomb_rate          = 1e-10,
+                                         weights_resolution   = 5,
+                                         likelihood_toggle    = TRUE,
+                                         se_observed          = observed_gwas_se,
+                                         LD_Infer             = FALSE,
+                                         genetic_map          = FALSE,
+                                         chain_likelihood     = TRUE,
+                                         nChains              = chains)
+}
+
+#Add on the traces across the different parameters (ie nHaps)
+p <- plot_ly()
+for (i in 1:length(nsnps)) {
+  nSamples_trace = seq(1:nSamples)
+  r2 = r2_true_inferred_af_across_chains(inferred_allele_freq = results[i][[1]][[4]],
+                                         true_allele_freq     = gwas_variants_af[[i]],
+                                         graphic              = FALSE)
+  p  =  add_trace(p, x=nSamples_trace, y=r2, type="scatter", mode="markers",evaluate = TRUE, name = sprintf("%s SNPS in Dataset",nsnps[i]))
+}
+p <- p %>% layout(title = 'Correlation of True to Inferred Allele Frequency Across Sweeps',
+                    xaxis = list(title = 'nSamples (Full Sweeps)'),
+                    yaxis = list(title = 'r2 correlation (Inferred~True)'))
+p
+
+#Plot the different allele frequencies converging (for best & worse case)
+low_snps_accuracy  =  allele_frequency_accuracy_across_chains(results[1][[1]][[4]], true_gwas_af = gwas_variants_af[[1]])
+low_snps_accuracy 
+high_snps_accuracy =  allele_frequency_accuracy_across_chains(results[5][[1]][[4]], true_gwas_af = gwas_variants_af[[5]])
+high_snps_accuracy
+#Plot the different likliehoods
+ll_plot = plot_ly()
+for (i in 1:length(nsnps)) {
+  ll = results[i][[1]][[3]]
+  ll_plot <- add_trace(ll_plot, x=seq(1:length(ll)), y=ll, type="scatter", mode="markers",evaluate = TRUE, name = sprintf("%s SNPS in Dataset",nsnps[i]))
+}
+ll_plot <- ll_plot %>% layout(title = 'Log Likelihood Across per Haplotype Sweeps',
+                    xaxis = list(title = 'nSamples (Per Haplotype Sweeps)'),
+                    yaxis = list(title = 'Log Likelihood'))
+ll_plot
+
+```
+Now include some genetic drift!
+Look at effect of changing nHaps
+```{r nHaps w Drift Function, echo=FALSE}
+nhaps    = c(10,100,200,400,808) #Change the Nhaps in reference panel
+nsnps    = 100                   #Constant NSnps
+results  = c()                   #Store results as a vector
+gwas_variants_af = list()        #Needs to be a list since there might be different number of GWAS variants that pass filtering
+for (i in 1:length(nhaps)) {
+  nSamples              = 10      #Constant nSamples
+  alpha                 = 1e4     #Constant alpha
+  chains                = 1       #Single Chain
+  sim_data              = simulate_genetic_drift(Fst = 1e-1, nhaps = nhaps[i], nsnps = nsnps)
+  observed_gwas_se      = sim_data[[1]]
+  gwas_variants_af[[i]] = sim_data[[2]]  #Store the GWAS variant AF as matrix (nSamples across the columns)
+  ref_hap_panel         = sim_data[[3]]         
+      results[i]        = LD_from_GSHMM(ref_panel_haplotypes = ref_hap_panel,
+                                         Fst                  = 1e-1,
+                                         betas                = FALSE,
+                                         alpha                = alpha,
+                                         nSamples             = nSamples,
+                                         recomb_rate          = 1e-10,
+                                         weights_resolution   = 5,
+                                         likelihood_toggle    = TRUE,
+                                         se_observed          = observed_gwas_se,
+                                         LD_Infer             = FALSE,
+                                         genetic_map          = FALSE,
+                                         chain_likelihood     = TRUE,
+                                         nChains              = chains)
+}
+
+#Add on the traces across the different parameters (ie nHaps)
+p <- plot_ly()
+for (i in 1:length(nhaps)) {
+  nSamples_trace = seq(1:nSamples)
+  r2 = r2_true_inferred_af_across_chains(inferred_allele_freq = results[i][[1]][[4]],
+                                         true_allele_freq     = gwas_variants_af[[i]],
+                                         graphic              = FALSE)
+  p <- add_trace(p, x=nSamples_trace, y=r2, type="scatter", mode="markers",evaluate = TRUE, name = sprintf("%s Ref Haplotypes",nhaps[i]))
+}
+p <- p %>% layout(title = 'Correlation of True to Inferred Allele Frequency Across Sweeps',
+                    xaxis = list(title = 'nSamples (Full Sweeps)'),
+                    yaxis = list(title = 'r2 correlation (Inferred~True)'))
+p
+
+#Plot the different allele frequencies converging (for best & worse case)
+low_haps_accuracy  =  allele_frequency_accuracy_across_chains(results[1][[1]][[4]], true_gwas_af = gwas_variants_af[[1]])
+low_haps_accuracy 
+high_haps_accuracy =  allele_frequency_accuracy_across_chains(results[5][[1]][[4]], true_gwas_af = gwas_variants_af[[5]])
+high_haps_accuracy
+#Plot the different likliehoods
+ll_plot = plot_ly()
+for (i in 1:length(nhaps)) {
+  ll = results[i][[1]][[3]]
+  ll_plot <- add_trace(ll_plot, x=seq(1:length(ll)), y=ll, type="scatter", mode="markers",evaluate = TRUE, name = sprintf("%s Ref Haplotypes",nhaps[i]))
+}
+ll_plot <- ll_plot %>% layout(title = 'Log Likelihood Across per Haplotype Sweeps',
+                    xaxis = list(title = 'nSamples (Per Haplotype Sweeps)'),
+                    yaxis = list(title = 'Log Likelihood'))
+ll_plot
+
+```
+Look at effect of changing nSnps
+```{r nSnps w Drift Function, echo=FALSE}
+nhaps    = c(100)                   #Constant nHaps
+nsnps    = c(400)                   #Constant NSnps
+results  = c()                   #Store results as a vector
+gwas_variants_af = list()        #Needs to be a list since there might be different number of GWAS variants that pass filtering
+for (i in 1:length(nsnps)) {
+  nSamples              = 10      #Constant nSamples
+  alpha                 = 1e4     #Constant alpha
+  chains                = 1       #Single Chain
+  sim_data              = simulate_genetic_drift(Fst = 1e-1, nhaps = nhaps, nsnps = nsnps[i])
+  observed_gwas_se      = sim_data[[1]]
+  gwas_variants_af[[i]] = sim_data[[2]]  #Store the GWAS variant AF as matrix (nSamples across the columns)
+  ref_hap_panel         = sim_data[[3]]         
+      results[i]        = LD_from_GSHMM(ref_panel_haplotypes = ref_hap_panel,
+                                         Fst                  = 1e-1,
+                                         betas                = FALSE,
+                                         alpha                = alpha,
+                                         nSamples             = nSamples,
+                                         recomb_rate          = 1e-100,
+                                         weights_resolution   = 5,
+                                         likelihood_toggle    = TRUE,
+                                         se_observed          = observed_gwas_se,
+                                         LD_Infer             = FALSE,
+                                         genetic_map          = FALSE,
+                                         chain_likelihood     = TRUE,
+                                         nChains              = chains)
+}
+
+#Add on the traces across the different parameters (ie nHaps)
+p <- plot_ly()
+for (i in 1:length(nsnps)) {
+  nSamples_trace = seq(1:nSamples)
+  r2 = r2_true_inferred_af_across_chains(inferred_allele_freq = results[i][[1]][[4]],
+                                         true_allele_freq     = gwas_variants_af[[i]],
+                                         graphic              = FALSE)
+  p  =  add_trace(p, x=nSamples_trace, y=r2, type="scatter", mode="markers",evaluate = TRUE, name = sprintf("%s SNPS in Dataset",nsnps[i]))
+}
+p <- p %>% layout(title = 'Correlation of True to Inferred Allele Frequency Across Sweeps',
+                    xaxis = list(title = 'nSamples (Full Sweeps)'),
+                    yaxis = list(title = 'r2 correlation (Inferred~True)'))
+p
+
+#Plot the different allele frequencies converging (for best & worse case)
+low_snps_accuracy  =  allele_frequency_accuracy_across_chains(results[1][[1]][[4]], true_gwas_af = gwas_variants_af[[1]])
+low_snps_accuracy 
+high_snps_accuracy =  allele_frequency_accuracy_across_chains(results[5][[1]][[4]], true_gwas_af = gwas_variants_af[[5]])
+high_snps_accuracy
+#Plot the different likliehoods
+ll_plot = plot_ly()
+for (i in 1:length(nsnps)) {
+  ll = results[i][[1]][[3]]
+  ll_plot <- add_trace(ll_plot, x=seq(1:length(ll)), y=ll, type="scatter", mode="markers",evaluate = TRUE, name = sprintf("%s SNPS in Dataset",nsnps[i]))
+}
+ll_plot <- ll_plot %>% layout(title = 'Log Likelihood Across per Haplotype Sweeps',
+                    xaxis = list(title = 'nSamples (Per Haplotype Sweeps)'),
+                    yaxis = list(title = 'Log Likelihood'))
+ll_plot
+
+```
+Increase nSamples to 20 see how we perfrom on the highest 400 SNP test case
+```{r High nSamples for Drifted High Number of SNPs}
+nhaps    = 500                   #Constant nHaps
+nsnps    = c(400)                   #Constant NSnps
+results  = c()                   #Store results as a vector
+gwas_variants_af = list()        #Needs to be a list since there might be different number of GWAS variants that pass filtering
+for (i in 1:length(nsnps)) {
+  nSamples              = 10      #Constant nSamples
+  alpha                 = 1e4     #Constant alpha
+  chains                = 1       #Single Chain
+  sim_data              = simulate_genetic_drift(Fst = 1e-1, nhaps = nhaps, nsnps = nsnps[i])
+  observed_gwas_se      = sim_data[[1]]
+  gwas_variants_af[[i]] = sim_data[[2]]  #Store the GWAS variant AF as matrix (nSamples across the columns)
+  ref_hap_panel         = sim_data[[3]]         
+      results[i]        = LD_from_GSHMM(ref_panel_haplotypes = ref_hap_panel,
+                                         Fst                  = 1e-1,
+                                         betas                = FALSE,
+                                         alpha                = alpha,
+                                         nSamples             = nSamples,
+                                         recomb_rate          = 1e-100,
+                                         weights_resolution   = 5,
+                                         likelihood_toggle    = TRUE,
+                                         se_observed          = observed_gwas_se,
+                                         LD_Infer             = FALSE,
+                                         genetic_map          = FALSE,
+                                         chain_likelihood     = TRUE,
+                                         nChains              = chains)
+}
+
+#Add on the traces across the different parameters (ie nHaps)
+p <- plot_ly()
+for (i in 1:length(nsnps)) {
+  nSamples_trace = seq(1:nSamples)
+  r2 = r2_true_inferred_af_across_chains(inferred_allele_freq = results[i][[1]][[4]],
+                                         true_allele_freq     = gwas_variants_af[[i]],
+                                         graphic              = FALSE)
+  p  =  add_trace(p, x=nSamples_trace, y=r2, type="scatter", mode="markers",evaluate = TRUE, name = sprintf("%s SNPS in Dataset",nsnps[i]))
+}
+p <- p %>% layout(title = 'Correlation of True to Inferred Allele Frequency Across Sweeps',
+                    xaxis = list(title = 'nSamples (Full Sweeps)'),
+                    yaxis = list(title = 'r2 correlation (Inferred~True)'))
+p
+
+#Plot the different allele frequencies converging (for best & worse case)
+low_snps_accuracy  =  allele_frequency_accuracy_across_chains(results[1][[1]][[4]], true_gwas_af = gwas_variants_af[[1]])
+low_snps_accuracy 
+high_snps_accuracy =  allele_frequency_accuracy_across_chains(results[5][[1]][[4]], true_gwas_af = gwas_variants_af[[5]])
+high_snps_accuracy
+#Plot the different likliehoods
+ll_plot = plot_ly()
+for (i in 1:length(nsnps)) {
+  ll = results[i][[1]][[3]]
+  ll_plot <- add_trace(ll_plot, x=seq(1:length(ll)), y=ll, type="scatter", mode="markers",evaluate = TRUE, name = sprintf("%s SNPS in Dataset",nsnps[i]))
+}
+ll_plot <- ll_plot %>% layout(title = 'Log Likelihood Across per Haplotype Sweeps',
+                    xaxis = list(title = 'nSamples (Per Haplotype Sweeps)'),
+                    yaxis = list(title = 'Log Likelihood'))
+ll_plot
+```
+
+Find Bug
+
+```{r}
+set.seed(3462)
+nhaps    = c(100) #Change the Nhaps in reference panel
+nsnps    = 100                   #Constant NSnps
+results  = c()                   #Store results as a vector
+gwas_variants_af = list()        #Needs to be a list since there might be different number of GWAS variants that pass filtering
+for (i in 1:length(nhaps)) {
+  nSamples              = 10      #Constant nSamples
+  alpha                 = 1e4     #Constant alpha
+  chains                = 1       #Single Chain
+  sim_data              = simulate_genetic_drift(Fst = 1e-1, nhaps = nhaps[i], nsnps = nsnps)
+  observed_gwas_se      = sim_data[[1]]
+  gwas_variants_af[[i]] = sim_data[[2]]  #Store the GWAS variant AF as matrix (nSamples across the columns)
+  ref_hap_panel         = sim_data[[3]]         
+      results[i]        = LD_from_GSHMM(ref_panel_haplotypes = ref_hap_panel,
+                                         Fst                  = 1e-1,
+                                         betas                = FALSE,
+                                         alpha                = alpha,
+                                         nSamples             = nSamples,
+                                         recomb_rate          = 1e-100,
+                                         weights_resolution   = 5,
+                                         likelihood_toggle    = TRUE,
+                                         se_observed          = observed_gwas_se,
+                                         LD_Infer             = FALSE,
+                                         genetic_map          = FALSE,
+                                         chain_likelihood     = TRUE,
+                                         nChains              = chains)
+}
+
+ll_plot = plot_ly()
+for (i in 1:length(nhaps)) {
+  ll = results[i][[1]][[3]]
+  ll_plot <- add_trace(ll_plot, x=seq(1:length(ll)), y=ll, type="scatter", mode="markers",evaluate = TRUE, name = sprintf("%s Ref Haplotypes",nhaps[i]))
+}
+ll_plot <- ll_plot %>% layout(title = 'Log Likelihood Across per Haplotype Sweeps',
+                    xaxis = list(title = 'nSamples (Per Haplotype Sweeps)'),
+                    yaxis = list(title = 'Log Likelihood'))
+ll_plot
+
+```
+
