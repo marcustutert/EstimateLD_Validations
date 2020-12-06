@@ -12,7 +12,7 @@ simulate_genetic_drift = function(Fst,
   #path <- dirname(getwd())
 
   #Load in 1000G data from ./Test/Data
-  ref_hap_panel     = as.matrix(read.table(sprintf("%s/Data/ref_panel_filtered", path),
+  ref_hap_panel     = as.matrix(read.table(sprintf("/Users/marcustutert/Desktop/Oxford_Dphil/InferLD_Validations/Data/ref_panel_filtered", path),
                                            header = TRUE))
   #Subset to nhaps and nsnps size to make testing easier
   ref_hap_panel_filtered     = ref_hap_panel[ 1:nhaps, 1:nsnps,drop = F ]
