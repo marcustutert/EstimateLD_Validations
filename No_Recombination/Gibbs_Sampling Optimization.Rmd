@@ -30,8 +30,9 @@ library(plotly)
 ```
 Look at effect of changing nHaps with some drift
 ```{r nHaps Function, echo=FALSE}
+library(matrixStats)
 #Loop over a given number of replicates (here it will be 5)
-nreplicates         = 10
+nreplicates         = 2
 replicate_result    = list()  
 count               = 1   #Bookmarking thru the double loop
 gwas_variants_af    = list()                  #Going to store this as a list!

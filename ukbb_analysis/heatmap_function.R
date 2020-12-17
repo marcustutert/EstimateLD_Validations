@@ -10,10 +10,12 @@ library(reshape2)
 library(data.table)
 #Get some of the data to play around with
 gibbs_array = readRDS("~/Desktop/gibbs_array_heatmap_test")
+data = gibbs_array
 #First thing we can do is subset this down to a matrix across the Nhaps and nSamples (full)
 sample_ids  = read.table("~/Desktop/heatmap_id_input", header = T) #Pops and super pops/Samples
 #Because weights do not change along the genome
-data = gibbs_array[,1,]
+#data = gibbs_array[,1,]
+nSamples = dim(data)[3]
 #Rbind in the sample names/pops
 data = cbind(sample_ids$pop,data)
 data = cbind(sample_ids$super_pop,data)
@@ -26,7 +28,7 @@ setDT(mine.long)[, ("V2") := lapply(.SD, as.character), .SDcols = "V2"]
 x = mine.long[, lapply(.SD, sum, na.rm=TRUE), by=c("V2","variable"), .SDcols=c("value") ]
 afr = x[which(x$V2 == "AFR"),]$value/600
 eur = x[which(x$V2 == "EUR"),]$value/500
-fig <- plot_ly(data, x = ~seq(1:5760))
+fig <- plot_ly(data, x = ~seq(1:11520))
 fig <- fig %>% add_trace(y = ~afr/(eur+afr), name = 'AFR',mode = 'lines')
 fig <- fig %>% add_trace(y = ~eur/(eur+afr), name = 'EUR', mode = 'lines')
 fig
