@@ -2,63 +2,46 @@
 #Function to do SS imputation from reference hap panel
 ########################################################
 
-impute.ss<-function(ref.hap, sites.typed, betas, sd.betas, N, phi, min.AF=0.01,
-                    shrink.fac=0.001, show.plot=TRUE){
+impute_ss = function(ref_hap_panel,
+                     sites.typed,
+                     betas,
+                     sd.betas,
+                     case_control_constant,
+                     min.AF     = 0.01,
+                     shrink.fac = 0.001,
+                     LD_Matrix  = FALSE,
+                     LD         = NULL){
 
   #Parameters
-  l<-ncol(ref.hap);
+  nsnps = ncol(ref_hap_panel)
+  nhaps = nrow(ref_hap_panel)
 
-  #First construct LD matrix
-  rij<-cor(ref.hap);
-
-  #Use a small amount of shrinkage to make it invertible / correct for LD overestimation
-  ii<-1:l;
-  im<-array(ii,c(l,l));
-  del<-exp(-abs(im - t(im))*shrink.fac);
-
-  #Get normalisation for Sigma
-  fi<-apply(ref.hap, 2, mean);
-  gt.var<-sqrt(2*fi*(1-fi));
-  vv<- gt.var %*% t(gt.var);
-  sig<-rij*del/vv;
-
-  set.typed<-sort(sites.typed);
-  set.untyped<-setdiff(1:l, sites.typed);
-
-  #Perform mean imputation
-  inv.sig.typed<-solve(sig[set.typed,set.typed]);
-  sig12<-sig[set.untyped,set.typed];
-  e.beta1<- (sig12 %*% inv.sig.typed) %*% (betas);
-  sig11<-sig[set.untyped, set.untyped];
-  cond.sig11<- sig11 - (sig12 %*% inv.sig.typed) %*% t(sig12);
-  cond.sd1 <- sqrt(diag(cond.sig11)/(N*phi*(1-phi)));
-
-  zs.typed<-abs(betas)/sd.betas;
-  sd.betas1<-sqrt(diag(sig)[set.untyped]/(N*phi*(1-phi)));
-  zs.untyped<-abs(e.beta1)/sd.betas1;
-
-  if (show.plot) {
-    plot(sites.typed, zs.typed, col="darkblue", pch=19, xlim=c(1,l), xlab="Position", ylab="|Z|-score");
-    w.show<-which(fi[set.untyped]>min.AF & fi[set.untyped]<(1-min.AF));
-    points(set.untyped[w.show], zs.untyped[w.show], col="lightblue", pch=19);
-    segments(set.untyped[w.show], zs.untyped[w.show]-2*cond.sd1[w.show]/sd.betas1[w.show],
-             set.untyped[w.show], zs.untyped[w.show]+2*cond.sd1[w.show]/sd.betas1[w.show], col=grey(0.75));
+  if (LD_Matrix == FALSE) { #Perform summary statistic imputation using the reference panel
+    LD<-cor(ref_hap_panel)
   }
 
-  #Return object
-  op<-array(0,c(l,7));
-  colnames(op)<-c("Site", "Ref.freq", "Typed", "Beta",
-                  "SD.Beta", "Cond.SD.Beta", "Z-score");
-  op[,1]<-1:l;
-  op[,2]<-fi;
-  op[set.typed,3]<-1;
-  op[set.typed,4]<-betas;
-  op[set.typed,5]<-sd.betas;
-  op[set.typed,7]<-abs(betas)/sd.betas;
-  op[set.untyped,4]<-e.beta1;
-  op[set.untyped,5]<-sd.betas1;
-  op[set.untyped,6]<-cond.sd1;
-  op[set.untyped,7]<-(e.beta1)/sd.betas1;
+  if (LD_Matrix == TRUE) {  #Use LD matrix from inferred method
+    LD = LD
+  }
 
-  return(op);
+  #Use a small amount of shrinkage to make panel invertible / correct for LD overestimation
+  ii = seq(1:nsnps)
+  im<-array(ii,c(nsnps,nsnps))
+  del<-exp(-abs(im - t(im))*shrink.fac) #Use linear alg to shrink non-diagonals
+
+  #Get normalisation for Sigma
+  ref_freq = colMeans(ref_hap_panel)
+  gt.var   = sqrt(2*ref_freq*(1-ref_freq));
+  vv       = gt.var %*% t(gt.var);
+  R        = LD*del/vv;
+
+  # #Figure out which sites are typed and untyped
+  set.typed   = sites.typed
+  set.untyped = setdiff(1:ncol(ref_hap_panel), sites.typed);
+
+  #Solve correlation matrix
+  inv.sig.typed = pseudoinverse(R[set.typed,set.typed], tol = 1e-10)
+  W             = R[set.untyped,set.typed]
+  expected_z    = W %*% inv.sig.typed %*% (betas/sd.betas)
+  return(expected_z) #Return expected z scores
 }
