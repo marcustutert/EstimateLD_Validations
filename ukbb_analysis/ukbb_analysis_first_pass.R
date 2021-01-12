@@ -179,7 +179,7 @@
     #Get correlation of true/inferred AF across imputed data
     inferred_r2_imputed  = (summary(lm(inferred_imputed_af~AF))$r.squared)
     reference_r2_imputed = (summary(lm(colMeans(ref_hap_panel_imputed)~AF))$r.squared)
-    print(length(AF))
+
     fig_impute = plot_ly()
     fig_impute <- plot_ly(data = iris)
     fig_impute <- plot_ly(x = ~AF, y = ~colMeans(ref_hap_panel_imputed), name = sprintf("%s Reference Panel (r2 %.3f)", population, reference_r2_imputed), mode = 'markers',type='scatter')
@@ -288,7 +288,7 @@
     system(sprintf("/apps/well/plink/1.90b3/plink --bfile /well/mcvean/ukbb12788/mtutert/genotyped_qc_wba/ukbb_genotype_qc_wba_chr1 --r square --out ./analysis/ld_results/genotyped_ld_indiv_ukbb_data_matched_to_%s --extract ./analysis/ld_results/genotyped_%s_rsid --keep-allele-order --silent", population, population))
 
     #Get the LD across 1000G population specified in the function and across specific rsid's
-    system(sprintf("/apps/well/plink/1.90b3/plink  --bfile /well/mcvean/mtutert/1000_Genomes/plink/1000G_chr1 --r square --out ./analysis/ld_results/genotyped_%s_ld_reference --extract ./analysis/ld_results/genotyped_%s_rsid --keep-allele-order --keep-fam ./analysis/pop_sample_tables/%s_pop_samples --silent", population, population, population))
+    system(sprintf("/apps/well/plink/1.90b3/plink  --bfile /well/mcvean/mtutert/1000_Genomes/plink/1000G_chr1 --r square --out ./analysis/ld_results/genotyped_%s_ld_reference --extract ./analysis/ld_results/genotyped_%s_rsid --keep-allele-order --keep-fam ./analysis/pop_sample_tables/%s_pop_samples", population, population, population))
 
     #Use the LD we inferred at the LAST sample from the
     Inferred_LD = Inferred_LD[,,dim(Inferred_LD)[3]]
@@ -299,9 +299,9 @@
 
     #Plot the resulting graphs
     #Down-sample the LD (only if points are >>>>)
-    if (length(c(True_LD))>2e4) {
+    if (length(c(True_LD))>1e4) {
       index             = seq(1:length(c(True_LD)))
-      downsampled_index = sample(x = index, size = 2e4, replace = F)
+      downsampled_index = sample(x = index, size = 1e4, replace = F)
     }
     else{
       downsampled_index = seq(1:length(c(True_LD)))
@@ -341,10 +341,8 @@
     #Get the post burnin LD
     HW_Per_Sample_Array   = HW_Array[,,dim(HW_Array)[3]]
     single_column_weights = HW_Per_Sample_Array[,1] #Extract first column of weights
-    print(nsnps_imputed)
-    print(length(single_column_weights))
+
     imputed_weights       = matrix(rep(single_column_weights,nsnps_imputed),nrow = length(single_column_weights),ncol = nsnps_imputed,byrow = FALSE)
-    print("here")
     Qx_Array              = markovian_flow(HW_Matrix    = imputed_weights,
                                            start         = 1,
                                            end           = ncol(imputed_weights),
@@ -354,7 +352,6 @@
                                                 ref_allele_matrix = ref_hap_panel_imputed,
                                                 Qx_array          = Qx_Array,
                                                 recombination     = F)
-    print("here2")
     #Write out imputed inferred LD results
     write.table(LD_imputed,sprintf("./analysis/ld_results/LD_imputed_from_inference_matched_%s", population),quote = F, row.names = F, col.names = F)
 
@@ -371,7 +368,7 @@
 
     #Downsample the LD
     index             = seq(1:length(c(True_LD)))
-    downsampled_index = sample(x = index, size = 2e4, replace = F)
+    downsampled_index = sample(x = index, size = 1e4, replace = F)
 
     #Get r2 correlations
     reference_true_r2 = summary(lm(c(Reference_LD)~c(True_LD)))$r.squared
@@ -399,7 +396,6 @@
   {
     #Remove from the genotyped_sumstats file, SNPs that don't match at all
     remove_snps_index  = which(!genotyped_sumstats$SNP %in% imputed_sumstats$SNP )
-    print(remove_snps_index)
     genotyped_sumstats = genotyped_sumstats[-c(remove_snps_index),]
     #First we need to find which SNPs, based on their indexes, were typed or imputed
     typed_snps_index   = which(imputed_sumstats$SNP %in% genotyped_sumstats$SNP)
@@ -462,6 +458,7 @@
     imputed_z_reference      = sumstat_results[[1]]
     true_z                   = sumstat_results[[2]]
     reference_ld_r2          = summary(lm(imputed_z_reference~true_z))$r.squared
+    print(length(true_z))
 
     #Do the plotting!
     #PLot results
@@ -528,10 +525,10 @@
       #Prepare data for inference ----
 
       #Create list of all 1000G Populations in a list (this is what we can expand)
-      KG_super_pop_names = list("EUR","AFR")
+      KG_super_pop_names = list(c("EUR","AFR"))
 
       #Write out list of samples split by super population in 1000G
-      KG_samples_split_by_pop(pop_list = KG_super_pop_names)
+      #KG_samples_split_by_pop(pop_list = KG_super_pop_names)
       gwas_rsid = ukbb_sumstats$SNP #SNPs in the GWAS
       write.table(gwas_rsid,"./analysis/temp_files/gwas_rsid", quote = F, row.names = F, col.names = F)
 
@@ -544,6 +541,20 @@
       #Loop through ref panels ----
 
       for (i in 1:length(KG_super_pop_names)) {
+
+        #Diverse Reference Panels ----
+        if (length(KG_super_pop_names[[i]])>1) {
+          #Split up panel into component subpopulations
+          pop_A            = KG_super_pop_names[[i]][1]
+          pop_B            = KG_super_pop_names[[i]][2]
+          pop_A_samples    = read.table(sprintf("./analysis/pop_sample_tables/%s_pop_samples", pop_A), header = F)
+          pop_B_samples    = read.table(sprintf("./analysis/pop_sample_tables/%s_pop_samples", pop_B), header = F)
+          diverse_samples  = rbind(pop_A_samples,pop_B_samples)
+          diverse_name     = paste(sprintf("%s",pop_A), sep = "_and_",sprintf("%s",pop_B))
+          write.table(file = sprintf("./analysis/pop_sample_tables/%s_pop_samples",diverse_name), x = diverse_samples, quote = F, row.names = F, col.names = F)
+          #Replace name in KG_super_pop_names with the name pasted name (pop_A & pop_B)
+          KG_super_pop_names[[i]] = diverse_name
+          }
         system(sprintf("/well/mcvean/mtutert/software/plink2 --max-alleles 2 --pfile /well/mcvean/mtutert/1000_Genomes/1000G_chr1 --keep ./analysis/pop_sample_tables/%s_pop_samples --extract ./analysis/temp_files/gwas_rsid --export haps --out  ./analysis/genotyped_reference_panel/1000G_%s --silent", KG_super_pop_names[[i]],KG_super_pop_names[[i]]))
         results       = match_rsids(ref_hap_panel = sprintf("./analysis/genotyped_reference_panel/1000G_%s.haps", KG_super_pop_names[[i]]),sumstats = ukbb_sumstats)
         sumstats      = results[[1]]
@@ -558,23 +569,23 @@
         fst             = 0.001
 
         #Run Genotype Inference (InferLD) ----
-        inference_results_1000G = LD_from_GSHMM(ref_panel_haplotypes   = ref_hap_panel,
-                                                fst                    = fst,
-                                                betas                  = FALSE,
-                                                alpha                  = alpha,
-                                                nSamples               = nSamples,
-                                                recomb_rate            = 1e-300,
-                                                weights_resolution     = 10,
-                                                likelihood_toggle      = TRUE,
-                                                se_observed            = sumstats$SE,
-                                                LD_Infer               = TRUE,
-                                                genetic_map            = FALSE,
-                                                chain_likelihood       = TRUE,
-                                                nChains                = 1,
-                                                recombination          = FALSE,
-                                                case_control_constant  = 122848,
-                                                BurnIn                 = TRUE)
-        saveRDS(inference_results_1000G,file = sprintf("./analysis/inference_results/%s_inference_results",KG_super_pop_names[[i]]))
+        # inference_results_1000G = LD_from_GSHMM(ref_panel_haplotypes   = ref_hap_panel,
+        #                                         fst                    = fst,
+        #                                         betas                  = FALSE,
+        #                                         alpha                  = alpha,
+        #                                         nSamples               = nSamples,
+        #                                         recomb_rate            = 1e-300,
+        #                                         weights_resolution     = 10,
+        #                                         likelihood_toggle      = TRUE,
+        #                                         se_observed            = sumstats$SE,
+        #                                         LD_Infer               = TRUE,
+        #                                         genetic_map            = FALSE,
+        #                                         chain_likelihood       = TRUE,
+        #                                         nChains                = 1,
+        #                                         recombination          = FALSE,
+        #                                         case_control_constant  = 122848,
+        #                                         BurnIn                 = TRUE)
+        #saveRDS(inference_results_1000G,file = sprintf("./analysis/inference_results/%s_inference_results",KG_super_pop_names[[i]]))
 
         #Plot Likelihoods ----
         #For each reference panel plot:
@@ -600,7 +611,7 @@
                                                                                   population          = KG_super_pop_names[[i]])
 
         export(fig_genotyped_markers_accuracy[[i]], file = sprintf("./analysis/genotyped_reference_panel/genotyped_markers_accuracy_%s_panel.jpeg", KG_super_pop_names[[i]]))
-
+        #
         #Imputed Markers Accuracy -----
         fig_imputed_markers_accuracy[[i]]  = plot_imputed_markers_vs_reference(population = KG_super_pop_names[[i]], HW_Array = results$Gibbs_Array)
         export(fig_imputed_markers_accuracy[[i]], file = sprintf("./analysis/imputed_reference_panel/imputed_markers_accuracy_%s_panel.jpeg", KG_super_pop_names[[i]]))
