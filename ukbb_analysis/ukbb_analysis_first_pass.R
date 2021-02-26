@@ -54,7 +54,7 @@
     weight_matrix_sum           = (colSums(weight_matrix))
     weight_matrix_normalized    = weight_matrix/weight_matrix_sum
     allele_freqs                = colSums(ref_hap_panel*weight_matrix_normalized)
-    SE                          = 1/(2*(case_control_constant*(allele_freqs*(1-allele_freqs))))
+    SE                          = 1/(case_control_constant*(allele_freqs*(1-allele_freqs)))
     ratio                       = gwas_observed/SE
     ll                          = sum(dgamma(x = ratio, shape = noise, rate = noise,log = T))
     return(ll)
@@ -318,7 +318,7 @@
 
     fig_genotyped_LD  <- layout(fig_genotyped_LD,
                                 title  = sprintf("Genotyped (Training Model) SNPs Pairwise LD Comparison to %s Panel",population),
-                                xaxis  = list(title = "True LD (LD r)"),
+                                xaxis  = list(title = sprintf("True LD (LD r) Compared to %s Panel", population)),
                                 yaxis  = list(title = "Comparison LD (LD r)"))
     return(fig_genotyped_LD)
   }
@@ -382,7 +382,7 @@
     #Add layout
     fig_imputed_LD  <- layout(fig_imputed_LD,
                               title  = sprintf("Imputed (Training Model) SNPs Pairwise LD Comparison",population),
-                              xaxis  = list(title = "True LD (LD r)"),
+                              xaxis  = list(title = sprintf("True LD (LD r) Compared to %s Panel", population)),
                               yaxis  = list(title = "Comparison LD (LD r)"))
     #Build figure
     fig_imputed_LD = plotly_build(fig_imputed_LD)
@@ -525,7 +525,7 @@
       #Prepare data for inference ----
 
       #Create list of all 1000G Populations in a list (this is what we can expand)
-      KG_super_pop_names = list(c("EUR","AFR"))
+      KG_super_pop_names = list("EUR",c("EUR","AFR"), "AFR")
 
       #Write out list of samples split by super population in 1000G
       #KG_samples_split_by_pop(pop_list = KG_super_pop_names)
@@ -564,28 +564,28 @@
         write.table(x = ref_hap_panel, file = sprintf("./analysis/genotyped_reference_panel/%s_panel",KG_super_pop_names[[i]]),quote = F, row.names = F, col.names = T)
 
         #Inference Parameters ----
-        nSamples        = 5
+        nSamples        = 3
         alpha           = 100
         fst             = 0.001
 
         #Run Genotype Inference (InferLD) ----
-        # inference_results_1000G = LD_from_GSHMM(ref_panel_haplotypes   = ref_hap_panel,
-        #                                         fst                    = fst,
-        #                                         betas                  = FALSE,
-        #                                         alpha                  = alpha,
-        #                                         nSamples               = nSamples,
-        #                                         recomb_rate            = 1e-300,
-        #                                         weights_resolution     = 10,
-        #                                         likelihood_toggle      = TRUE,
-        #                                         se_observed            = sumstats$SE,
-        #                                         LD_Infer               = TRUE,
-        #                                         genetic_map            = FALSE,
-        #                                         chain_likelihood       = TRUE,
-        #                                         nChains                = 1,
-        #                                         recombination          = FALSE,
-        #                                         case_control_constant  = 122848,
-        #                                         BurnIn                 = TRUE)
-        #saveRDS(inference_results_1000G,file = sprintf("./analysis/inference_results/%s_inference_results",KG_super_pop_names[[i]]))
+        inference_results_1000G = LD_from_GSHMM(ref_panel_haplotypes   = ref_hap_panel,
+                                                fst                    = fst,
+                                                betas                  = FALSE,
+                                                alpha                  = alpha,
+                                                nSamples               = nSamples,
+                                                recomb_rate            = 1e-300,
+                                                weights_resolution     = 10,
+                                                likelihood_toggle      = TRUE,
+                                                se_observed            = sumstats$SE,
+                                                LD_Infer               = TRUE,
+                                                genetic_map            = FALSE,
+                                                chain_likelihood       = TRUE,
+                                                nChains                = 1,
+                                                recombination          = FALSE,
+                                                case_control_constant  = 122848,
+                                                BurnIn                 = TRUE)
+        saveRDS(inference_results_1000G,file = sprintf("./analysis/inference_results/%s_inference_results",KG_super_pop_names[[i]]))
 
         #Plot Likelihoods ----
         #For each reference panel plot:
@@ -603,51 +603,38 @@
         #Export plot (per population)
         export(ll_graph, file = sprintf("./analysis/ll/%s_ll.jpeg",KG_super_pop_names[[i]]))
 
-        #Genotyped Markers Accuracy----
-        fig_genotyped_markers_accuracy[[i]] = plot_genotyped_markers_vs_reference(allele_freq_results = results$inferred_af_given_weights ,
-                                                                                  Gibbs_Array         = results$Gibbs_Array,
-                                                                                  ref_hap_panel       = ref_hap_panel,
-                                                                                  sumstats            = sumstats,
-                                                                                  population          = KG_super_pop_names[[i]])
-
-        export(fig_genotyped_markers_accuracy[[i]], file = sprintf("./analysis/genotyped_reference_panel/genotyped_markers_accuracy_%s_panel.jpeg", KG_super_pop_names[[i]]))
+        # #Genotyped Markers Accuracy----
+        # fig_genotyped_markers_accuracy[[i]] = plot_genotyped_markers_vs_reference(allele_freq_results = results$inferred_af_given_weights ,
+        #                                                                           Gibbs_Array         = results$Gibbs_Array,
+        #                                                                           ref_hap_panel       = ref_hap_panel,
+        #                                                                           sumstats            = sumstats,
+        #                                                                           population          = KG_super_pop_names[[i]])
         #
-        #Imputed Markers Accuracy -----
-        fig_imputed_markers_accuracy[[i]]  = plot_imputed_markers_vs_reference(population = KG_super_pop_names[[i]], HW_Array = results$Gibbs_Array)
-        export(fig_imputed_markers_accuracy[[i]], file = sprintf("./analysis/imputed_reference_panel/imputed_markers_accuracy_%s_panel.jpeg", KG_super_pop_names[[i]]))
+        # export(fig_genotyped_markers_accuracy[[i]], file = sprintf("./analysis/genotyped_reference_panel/genotyped_markers_accuracy_%s_panel.jpeg", KG_super_pop_names[[i]]))
 
-        #Genotyped LD Accuracy ----
-
-        fig_ld_genotyped_accuracy[[i]] = plot_ld_genotyped_markers(population  = KG_super_pop_names[[i]],
-                                                                   HW_Array    = results$Gibbs_Array,
-                                                                   Inferred_LD = results$LD_Array)
-        export(fig_ld_genotyped_accuracy[[i]], file = sprintf("./analysis/ld_results/genotyped_ld_accuracy_%s_panel.jpeg", KG_super_pop_names[[i]]))
-
-        #Imputed LD Accuracy ----
-        fig_ld_imputed_accuracy[[i]] = plot_ld_imputed_markers(KG_super_pop_names[[i]],
-                                                               results$Gibbs_Array)
-        export(fig_ld_imputed_accuracy[[i]], file = sprintf("./analysis/ld_results/imputed_ld_accuracy_%s_panel.jpeg", KG_super_pop_names[[i]]))
-
-        #SumStats Imputation ----
-        fig_sumstat_imputation_accuracy[[i]] = plot_sumstat_imputation_comparison(population  = KG_super_pop_names[[i]],
-                                                                                  Inferred_LD = results$Gibbs_Array)
-        export(fig_sumstat_imputation_accuracy[[i]], file = sprintf("./analysis/sumstat_imputation_results/sumstat_imputation_accuracy_to_%s_Panel.jpeg", KG_super_pop_names[[i]]))
+        # #Imputed Markers Accuracy -----
+        # fig_imputed_markers_accuracy[[i]]  = plot_imputed_markers_vs_reference(population = KG_super_pop_names[[i]], HW_Array = results$Gibbs_Array)
+        # export(fig_imputed_markers_accuracy[[i]], file = sprintf("./analysis/imputed_reference_panel/imputed_markers_accuracy_%s_panel.jpeg", KG_super_pop_names[[i]]))
+        #
+        # #Genotyped LD Accuracy ----
+        #
+        # fig_ld_genotyped_accuracy[[i]] = plot_ld_genotyped_markers(population  = KG_super_pop_names[[i]],
+        #                                                            HW_Array    = results$Gibbs_Array,
+        #                                                            Inferred_LD = results$LD_Array)
+        # export(fig_ld_genotyped_accuracy[[i]], file = sprintf("./analysis/ld_results/genotyped_ld_accuracy_%s_panel.jpeg", KG_super_pop_names[[i]]))
+        #
+        # #Imputed LD Accuracy ----
+        # fig_ld_imputed_accuracy[[i]] = plot_ld_imputed_markers(KG_super_pop_names[[i]],
+        #                                                        results$Gibbs_Array)
+        # export(fig_ld_imputed_accuracy[[i]], file = sprintf("./analysis/ld_results/imputed_ld_accuracy_%s_panel.jpeg", KG_super_pop_names[[i]]))
+        #
+        # #SumStats Imputation ----
+        # fig_sumstat_imputation_accuracy[[i]] = plot_sumstat_imputation_comparison(population  = KG_super_pop_names[[i]],
+        #                                                                           Inferred_LD = results$Gibbs_Array)
+        # export(fig_sumstat_imputation_accuracy[[i]], file = sprintf("./analysis/sumstat_imputation_results/sumstat_imputation_accuracy_to_%s_Panel.jpeg", KG_super_pop_names[[i]]))
 
         # Generating Subplots ----
 
-        ######MAKE THIS SHIT SQUARE SOMEHOW
-
-        #genotype_accuracy_plot <- subplot(fig_genotype[[1]], fig_genotype[[2]],fig_genotype[[3]],fig_genotype[[4]],fig_genotype[[5]]) %>% layout(scene = list(aspectration=list(x=1,y=1)))
-        #export(genotype_accuracy_plot, file = "./analysis/figures/genotype_accuracy_plot.jpeg")
-
-        #fig_impute_plot <- subplot(fig_impute[[1]], fig_impute[[2]],fig_impute[[3]],fig_impute[[4]],fig_impute[[5]])
-        #export(fig_impute_plot, file = "./analysis/figures/imputation_accuracy_plot.jpeg")
-
-        #fig_ld_imputed_subplot <- subplot(fig_impute[[1]], fig_impute[[2]],fig_impute[[3]],fig_impute[[4]],fig_impute[[5]])
-        #export(fig_ld_imputed[[1]], file = sprintf("./analysis/results/ld_results/ld_results_%s.jpeg",KG_super_pop_names[[i]]))
-
-        #fig_ld_imputed_subplot <- subplot(fig_impute[[1]], fig_impute[[2]],fig_impute[[3]],fig_impute[[4]],fig_impute[[5]])
-        #export(fig_ld_imputed[[1]], file = sprintf("./analysis/results/ld_results/ld_results_%s.jpeg",KG_super_pop_names[[i]])
       }
     }
   }

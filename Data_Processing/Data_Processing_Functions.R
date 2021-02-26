@@ -4,18 +4,25 @@ simulate_genetic_drift = function(Fst,
                                   nhaps,
                                   nsnps,
                                   noise,
-                                  weights_resolution = 5){
+                                  weights_resolution = 5,
+                                  KG_Genome_ref = FALSE){
 
   #Set number of haplotypes and variants to a small number so we can do testing and debugging
 
   path = dirname(getwd()) #Set path relative to testing folder
   #path <- dirname(getwd())
 
-  #Load in 1000G data from ./Test/Data
-  ref_hap_panel     = as.matrix(read.table(sprintf("/Users/marcustutert/Desktop/Oxford_Dphil/InferLD_Validations/Data/ref_panel_filtered", path),
-                                           header = TRUE))
-  #Subset to nhaps and nsnps size to make testing easier
-  ref_hap_panel_filtered     = ref_hap_panel[ 1:nhaps, 1:nsnps,drop = F ]
+  #Create reference panel based on binomial distribution
+  ref_hap_panel_filtered = matrix(data = rbinom(nhaps*nsnps, size = c(0,1), prob = 0.5), nrow = nhaps, ncol = nsnps)
+
+  if (KG_Genome_ref == TRUE) {
+    #Load in 1000G data from ./Test/Data
+    ref_hap_panel     = as.matrix(read.table(sprintf("/Users/marcustutert/Desktop/Oxford_Dphil/InferLD_Validations/Data/ref_panel_filtered", path),
+                                             header = TRUE))
+    #Subset to nhaps and nsnps size to make testing easier
+    ref_hap_panel_filtered     = ref_hap_panel[ 1:nhaps, 1:nsnps,drop = F ]
+  }
+
   #Get AF of the variants in the reference panel
   if (nsnps == 1) {
     ref_variants_af = mean(ref_hap_panel_filtered)
@@ -23,10 +30,11 @@ simulate_genetic_drift = function(Fst,
   else{
     ref_variants_af   = colMeans(ref_hap_panel_filtered)
   }
+
   # #Generate weight state space from gamma quantiled weight distribution (discretized)
   Gamma_Quantiled_Weights = qgamma(p = (1:weights_resolution)/(1+weights_resolution), shape = 1 / ( nhaps * (Fst/(1-Fst))), rate  = 1/( nhaps * (Fst/(1-Fst))) )
   Gamma_Quantiled_Weights = Gamma_Quantiled_Weights[is.finite(Gamma_Quantiled_Weights) & Gamma_Quantiled_Weights > 0 ]
-  # #Create a GWAS matrix of weights (no recombination
+  # #Create a GWAS matrix of weights (no recombination)
   # #Each row will be the same vector of weights
   gwas_haplotype_matrix = matrix(data =  sample(x       = Gamma_Quantiled_Weights,
                                                 size    = nrow(ref_hap_panel_filtered),
@@ -34,16 +42,18 @@ simulate_genetic_drift = function(Fst,
                                  nrow = nrow(ref_hap_panel_filtered),
                                  ncol = ncol(ref_hap_panel_filtered),
                                  byrow = FALSE)
+
   gwas_sum                                  = colSums(gwas_haplotype_matrix)
   gwas_haplotype_matrix_norm                = sweep(gwas_haplotype_matrix, 2, gwas_sum, FUN = '/')
   #Get GWAS AF
   gwas_variants_af         = colSums(ref_hap_panel_filtered * gwas_haplotype_matrix_norm)
+
   #Filter out SNPs that are above/below a threshhold (0-100% exclusive)
   if (nsnps>1) {
-    filter_ref_snp_index_1       = which(colMeans(ref_hap_panel_filtered) > 0.97)
-    filter_ref_snp_index_2       = which(colMeans(ref_hap_panel_filtered) < 0.03)
-    filter_gwas_snp_index_1      = which(gwas_variants_af > 0.97)
-    filter_gwas_snp_index_2      = which(gwas_variants_af < 0.03)
+    filter_ref_snp_index_1       = which(colMeans(ref_hap_panel_filtered) > 0.99)
+    filter_ref_snp_index_2       = which(colMeans(ref_hap_panel_filtered) < 0.01)
+    filter_gwas_snp_index_1      = which(gwas_variants_af > 0.99)
+    filter_gwas_snp_index_2      = which(gwas_variants_af < 0.01)
     filter_snp_index_merged = unique(c(filter_ref_snp_index_1,filter_ref_snp_index_2,filter_gwas_snp_index_1,filter_gwas_snp_index_2))
 
     if (length(filter_snp_index_merged)>0) {
@@ -56,11 +66,13 @@ simulate_genetic_drift = function(Fst,
 
   observed_gwas_se  = 1/(gwas_variants_af*(1-gwas_variants_af)) * rgamma(length(gwas_variants_af),shape = noise,rate = noise)
   ll                = sum(dgamma(observed_gwas_se/observed_gwas_se,shape = noise, rate = noise, log = T))
-  return(list(observed_gwas_se,
+  data = list(observed_gwas_se,
               gwas_variants_af,
               ref_hap_panel_filtered,
               gwas_haplotype_matrix,
-              ll))
+              ll)
+  names(data) <- c("Observed_GWAS_SE", "GWAS_AF", "ref_panel", "gwas_matix", "ll")
+  return(data)
 }
 
 #This function takes in the allele frequencies at each nSample point in the chain and sees how close they are

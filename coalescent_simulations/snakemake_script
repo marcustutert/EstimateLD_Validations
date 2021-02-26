@@ -1,0 +1,16 @@
+"""
+#########README##########
+Running the inference of coalescent simulations on the cluster
+Assume we have generated the coalescent simulations locally with files located in: /Users/marcustutert/Desktop/Oxford_Dphil/InferLD_Validations/coalescent_simulations
+We run this file on the directory:  /well/mcvean/mtutert/thesis/coalescent_coverage
+With the command:
+snakemake --snakefile PATH/TO/SNAKEMAKE-j 100 --max-status-checks-per-second 0.01 --profile /well/mcvean/mtutert/snakemake/profile -f --rerun-incomplete -n
+Note that we may need to add specific things to the profile as we go on the fly--but unlikely
+"""
+print("Executing snakefile")
+rule all:
+    input:
+        expand("/well/mcvean/ukbb12788/mtutert/genotyped_qc_wba/ukbb_genotype_qc_wba_chr{chrs}.bed",chrs = chrs),
+        expand("/well/mcvean/ukbb12788/mtutert/impute_snp_qc/neale_variant_rsid_qc_chr{chrs}", chrs = chrs),
+        expand("/well/mcvean/ukbb12788/mtutert/impute_snp_qc/ukbb_imputed_qc_wba_chr{chrs}.bgen", chrs = chrs),
+        expand("/well/mcvean/mtutert/snakemake/pcs_chr{chrs}.txt",chrs = chrs)

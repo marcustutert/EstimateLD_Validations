@@ -1,0 +1,106 @@
+---
+title: "Chapter_2_Thesis_Figures"
+author: "Marcus Tutert"
+date: "13/01/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+#### Generative Model ()
+```{r Generative Model}
+#Simulate reference panel & GWAS under generative model
+
+#Inference Parameters ----
+nSamples        = c(10,20,100)
+alpha           = 1e4
+fst             = c(0.001,0.01,0.1)
+density_list    = list()
+counter         = 1
+ref             = c()
+for (i in 1:length(fst)) {
+  for (j in 1:length(nSamples)) {
+    
+    results = simulate_genetic_drift(Fst                = fst[i],
+                                     nhaps              = 500,
+                                     nsnps              = 5,
+                                     weights_resolution = 5,
+                                     noise              = alpha)
+    ref_hap_panel = results[[3]] 
+    ref[counter]  = colMeans(ref_hap_panel)[4]
+    se_observed   = results[[1]]
+    print(colMeans(ref_hap_panel)[4])
+    inference_results_1000G = LD_from_GSHMM(ref_panel_haplotypes  = ref_hap_panel,
+                                           fst                    = fst[i],
+                                           betas                  = FALSE,
+                                           alpha                  = 100,
+                                           nSamples               = nSamples[j],
+                                           recomb_rate            = 1e-300,
+                                           weights_resolution     = 5,
+                                           likelihood_toggle      = FALSE,
+                                           se_observed            = se_observed,
+                                           LD_Infer               = FALSE,
+                                           genetic_map            = FALSE,
+                                           chain_likelihood       = TRUE,
+                                           nChains                = 1,
+                                           recombination          = FALSE,
+                                           case_control_constant  = 1,
+                                           BurnIn                 = TRUE)
+
+    #Want these densities to compare with Nichols and Balding Model
+    density_list[[counter]] = density(inference_results_1000G$inferred_af_given_weights[4,]) #Empirical Density
+    counter = counter +1
+    print(counter)
+  }
+}
+
+#Nichols Balding Model parametrization
+fst      = c(0.001,0.001,0.001,.01,.01,.01,.1,.1,.1)
+density2 = list()
+for (i in 1:9) {
+  c = 1/fst-1
+  alpha = c*ref[i]
+  beta  = c*(1-ref[i])
+  density2[[i]] = density(rbeta(n = 5e4, shape1 = alpha, shape2 = beta)) #N-B Density
+}
+
+graphs = list()
+ax <- list(
+  title = "",
+  zeroline = TRUE,
+  showline = FALSE,
+  showticklabels = FALSE,
+  showgrid = TRUE
+)
+for (i in 1:9) {
+  graphs[[i]] <- plotly_build(plot_ly(x = ~density_list[[i]]$x, y = ~density_list[[i]]$y, type = 'scatter', mode = 'none', name = 'Empirical Density', fill = 'tozeroy', fillcolor = 'rgba(168, 216, 234, 0.5)') %>%
+  add_trace(x = ~density2[[i]]$x, y = ~density2[[i]]$y, name = 'Theoretical Density',  type = 'scatter', mode = 'none', fill = 'tozeroy',fillcolor = 'rgba(255, 212, 96, 0.5)')%>%
+  layout(yaxis = ax))
+}
+fig = plot_ly()
+fig <- plotly_build(subplot(nrows = 3,graphs[[1]], graphs[[2]], graphs[[3]], graphs[[4]], graphs[[5]], graphs[[6]], graphs[[7]], graphs[[8]], graphs[[9]]))
+fig <- fig %>% layout(showlegend = TRUE, title = "Nichols Balding Prior Recovery")
+# your axis title
+fig <- fig %>% add_annotations(
+        text = "Samples",
+        x = 0.5,
+        y = 0,
+        yref = "paper",
+        xref = "paper",
+        xanchor = "center",
+        yanchor = "bottom",
+        yshift = -45,
+        showarrow = FALSE,
+        font = list(size = 15)) 
+
+fig <- fig %>% layout(annotations = list(
+  list(x = 0, y = 0.3, text = "Fst",
+       xshift = -65,
+       font = list(size = 15),
+       textangle = 270,
+       showarrow = F, xref='paper', yref='paper', size=48)))
+fig
+```
